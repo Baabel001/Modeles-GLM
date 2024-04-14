@@ -1,0 +1,632 @@
+---
+title: "Modèles Linéaires Généralisées"
+author: "Papa Charles THIAM"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    toc_depth: 3
+    number_sections: yes
+    code_folding: show
+---
+
+<style>
+.cadre {
+  border-left: 2px solid #000;
+  padding: 5px;
+  margin: 10px
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 50% 50%;
+}
+</style>
+
+
+# Packages
+
+```{r}
+library("ggplot2")
+library('MASS')
+library("skimr")
+```
+
+# Rappels modèles linéaires
+
+## Exemple 1
+
+Simulons 250 unités d'observation qui satisfaient nos conditions d'application qui sont :
+
+  1. La relation entre variable cible et variables dépendantes peut être décrite par une relation linéaire : 
+$$
+Y = \beta_0 + \beta_1X_i + \epsilon
+$$
+  2. Le terme d'erreur $\epsilon$ a la même variance quelque soit la valeur de la variable explicative (c'est-à-dire, l'homoscédasticité), et les termes d'erreur ne sont pas corrélés entre les observations (donc, il n'y a pas d'autocorrélation) : 
+
+$$
+Var(\epsilon_i|X) = \sigma^2_\epsilon$, $\forall i = 1,...,N
+$$
+
+$$
+Cov(\epsilon_i, \epsilon_j) = O$, $i\neq j
+$$
+
+  3. Les résidus suivent une distribution normale :
+  
+$$
+\epsilon | X \sim \mathcal{N}(0, \sigma^2_\epsilon I)
+$$
+
+Pour cet exemple, on prend $\epsilon_i | X \sim \mathcal{N}(0, 2^2)$, $\forall i$
+
+```{r}
+# Données simulées
+nSamples <- 250
+ID <- factor(c(seq(1:nSamples)))
+PredVar <- runif(nSamples, 
+                  min = 0, 
+                  max = 50)
+simNormData <- data.frame(
+  ID = ID,
+  PredVar = PredVar,
+  RespVar = (2*PredVar + 
+               rnorm(nSamples,
+                     mean = 0,
+                     sd = 2)
+             )
+  )
+head(simNormData)
+```
+
+```{r}
+# modéle linéaire
+lm.simNormData <- lm(RespVar ~ PredVar, 
+                     data = simNormData)
+```
+
+```{r}
+# graphes des résidus
+layout(matrix(c(1,2,3,4),2,2)) 
+plot(lm.simNormData)
+```
+
+## Exemple 2 : modèle linéraire général
+
+Pour cet exemple, on cherche à répondre à la question : Est-ce que l'environnement permet de prédire l'abondance (Galuma), l'occurrence (pa), ou la proportion (prop) de Galumna sp.?
+
+```{r}
+# Chargement jeu de données
+mites <- read.csv('mites.csv', stringsAsFactors = TRUE)
+str(mites)
+# skim(mites)
+```
+
+Le jeu de données mites contient __70 échantillons de mousses et mites, 5 variables environmentales__, l'abondance de la mite Galumna sp., et l'abondance totale des mites.
+
+```{r}
+par(mfrow = c(1, 3), cex = 1.4)
+plot(Galumna ~ WatrCont, data = mites, 
+     xlab = 'Contenu en eau', ylab = 'Abondance')
+boxplot(WatrCont ~ pa, data = mites, 
+        xlab = 'Presence-absence', ylab = 'Contenu en eau', col = 'red')
+plot(prop ~ WatrCont, data = mites, 
+     xlab = 'Contenu en eau', ylab = 'Frquence relative')
+```
+
+A première vue, nous pouvons dire que la communauté de Galumna (abondance, occurence, et fréquence relative) varie en fonction du contenu en eau du sol. Utilisons des modèles linéaires (généraux) pour confirmer ou infirmer cette tendance.
+
+```{r}
+lm.abund <- lm(Galumna ~ WatrCont, data = mites)
+summary(lm.abund)
+
+lm.pa <- lm(pa ~ WatrCont, data = mites)
+summary(lm.pa)
+lm.prop <- lm(prop ~ WatrCont, data = mites)
+summary(lm.prop)
+```
+
+Tous les modèles sont significatifs. Mais...avons-nous respecté les conditions du modèle ?
+
+Oops! On a un problème
+
+```{r}
+plot(Galumna ~ WatrCont, data = mites)
+abline(lm.abund)
+```
+
+```{r}
+# par(mfrow = c(2, 2), cex = 1.4)
+layout(matrix(c(1,2,3,4),2,2))
+plot(lm.abund)
+```
+
+Comment régler ces problèmes? Transformer ?
+
+Souvent, les données ne respectent pas les conditions nous venons de voir, montrant des traces de non-normalité et/ou d'hétéroscédasticité.
+
+On se fait souvent dire qu'il faut transformer nos données en utilisant des transformations logarithmiques, racine carrée, et cosinus.
+
+Mais, les transformations ne règlent pas toujours le problème, et viennent avec quelques inconvénients :
+  1. Elles changent la variable réponse, ce qui peut compliquer l'interprétation;
+  2. Elles ne peuvent pas toujours améliorer la linéarité et l'homogénité de la variance en même temps;
+  3. Les limites de l'espace d'échantillonage changent.
+  
+<a id="next"></a>
+
+# GLM
+
+## Exercice 1
+
+```{r}
+logit.reg <- glm(pa ~ WatrCont + Topo, data=mites,
+                 family = binomial(link = "logit"))
+
+summary(logit.reg)
+```
+
+__Interpréter les coefficients de glm()__
+
+```{r}
+logit.reg <- glm(pa ~ WatrCont + Topo, data=mites,
+                 family = binomial(link = "logit"))
+summary(logit.reg)$coefficients
+```
+
+L'interprétation directe des coefficients dans le modèle logit est délicate en raison de la fonction de lien. Si le lien est identité, l'interprétation est beaucoup plus facile.
+
+Supposons que nous avons un résultat binaire $y$ et deux covariables $x_1$ et $x_2$ (et une constante). La probabilité d'un résultat positif ($y = 1$) est donnée par:
+
+$$
+Pr(y=1) = p = g^{-1}(\beta_0 + x_{1i}\beta_1 + x_{2i}\beta_2)
+$$
+
+avec $g$ la fonction de lien.
+
+### Lien d'identité
+
+Pour le lien d'identité, l'interprétation est simple. Pour l'augmentation d'une unité en $x_1$, $\beta_1$ entraîne une différence constante dans le résultat.
+
+$$
+\Delta y_i = [\beta_0 + (x_{1i} + 1)\beta_1 + x_{2i}\beta_2] - (\beta_0 + x_{1i}\beta_1 + x_{2i}\beta_2)
+$$
+
+$\Delta y_i = \beta_1$
+
+### Lien logit
+
+$$
+logit\left(\frac{p}{1-p}\right) = \beta_0 + x_{1i}\beta_1 + x_{2i}\beta_2
+$$
+
+$$
+Pr(y=1) = p = \frac{exp(\beta_0 + x_{1i}\beta_1 + x_{2i}\beta_2)}{1 + exp(\beta_0 + x_{1i}\beta_1 + x_{2i}\beta_2)}
+$$
+
+On a, après calcul :
+
+$\Delta y_i = exp(\beta_1)$
+
+Ainsi, on peut dire lorsque x augmente d'une unité, la probabilité augmente d'un facteur de $exp(\beta_1)$
+
+Par exemple, pour une augmentation (ou une diminution) d'une unité de contenu en eau, on peut obtenir la probabilité de la présence de mites.
+
+```{r}
+exp(logit.reg$coefficient[2])
+```
+
+Ce qu'on appelle $odds = \frac{p}{1-p}$. Quand $odds=1$, la probabilité d'observer l’évènement Y est égale à la probabilité de ne pas l'observer (i.e. $p = 0.5$, donc $0.5/(1−0.5)=1$).
+
+Lorsque $odds<1$, il faut prendre l'inverse (i.1 divisé par les odds).
+L'interprétation est alors de savoir quelle est la __moindre__ probabilité d'observer l'évènement d'intérêt.
+
+Pour la teneur en eau, le $odds$ est de 0.984. L'inverse est 1.0159. i.e., il y a une augmentation d'une unité de la teneur en eau diminue la probabilité d'observer Galumna sp. de 1.0159.
+
+Nous pouvons obtenir une variation en pourcentage comme ci-dessous : (1.0159 − 1)∗100=1.59. Il y a une diminution de 1.59 de la probabilité d'observer Galumna sp. avec une augmentation d'une unité de la teneur en eau.
+
+__Pouvoir prédictif et ajustement du modèle__
+
+Nous pouvons dans ce cas un __pseudo-__$R^2$, un concept analogue au $R^2$ pour les modèles estimés par maximisation de la vraisemblance.
+
+Nous pouvons calculer le __pseudo-__$R^2$ de McFadden (1973) : 
+
+$$
+\text{pseudo-}R^2 = \frac{\text{déviance nulle} - \text{déviance résiduelle}}{\text{déviance nulle}}
+$$
+
+__NB__ : La déviance unitaire est une mesure de la distance entre $y$ et $\mu$.
+
+$$
+d(y, y) = 0 \quad\text{et}\quad d(y,\mu)>0 \quad \forall y\neq\mu
+$$
+
+La déviance totale d'un modèle avec prédictions $\hat\mu$ de l'observation $y$ est la sommé de ses déviances unitaires :
+$$
+D(y, \hat{\mu}) = \sum_i d(y_i, \hat\mu_i)
+$$
+
+Maintenant, la déviance d'un mod_le avec des prédictions $\hat\mu = E[Y|\hat\theta_0]$ peut être définie par sa vraisemblance : 
+
+$$
+D(y, \hat{\mu}) = 2\left(\log(p(y|\hat\theta_s)) - \log(p(y|\hat\theta_0))\right)
+$$
+
+avec les paramètres ajustés dans le modèle réduit $(\hat\theta_0)$ et saturé $(\hat\theta_s)$.
+
+La **déviance résiduelle** est définie comme 2 fois le logarithme du ratio de vraisemblance du modèle complet par rapport au modèle réduit. (La fonction ci-dessous est exactement la même que ci-dessus !)
+
+$$
+D(y, \hat{\mu}) = 2\left(\log(p(\text{modèle saturé})) - \log(p(\text{modèle réduit}))\right)
+$$
+
+Et, la **déviation nulle** est définie comme 2 fois le logarithme du ratio de vraisemblance du modèle complet par rapport au modèle nul (où les prédicteurs sont fixés à 1).
+
+$$
+D(y, \hat{\mu}) = 2\left(\log(p(\text{modèle saturé})) - \log(p(\text{modèle nul}))\right)
+$$
+
+Le **modèle nul** est un modèle sans variables explicatives. Par exemple :
+
+```{r eval=FALSE}
+null.model <- glm(Response.variable ~ 1, family = binomial)
+```
+
+Le **modèle à déviance saturée (ou totale)** est ici un modèle avec toutes les variables explicatives.
+
+```{r eval=FALSE}
+full.model <- glm(response.variable ~ ., family = binomial)
+```
+
+Dans `R`, nous pouvons extraire les déviances résiduelles et nulles directement à partir de l'`objet glm`
+
+```{r}
+objects(logit.reg)
+```
+
+Ainsi, on peut avoir la valeur de __pseudo-__$R^2$ :
+```{r}
+pseudoR2 <- (logit.reg$null.deviance - logit.reg$deviance) / logit.reg$null.deviance
+pseudoR2
+```
+Donc, le modèle explique 46.6% de la variabilité des données.
+
+Comme $R^2$, pseudo-$R^2$ est sensible au nombre de prédicateurs. Pour pallier ce problème, nous pouvons utiliser un pseudo-$R^2$ de McFadden ajusté, qui pénalise pour le nombre de prédicateurs :
+
+$$
+R^2_{adj} = 1 - \frac{\log L(M) - K}{\log L(M_null)}
+$$
+où $k$ correspond au nombre supplémentaire de prédicateurs par rapport au modèle nul.
+
+__NB__ : La qualité d'ajustement des modèles de régression logistique peut être exprimée par des variantes de statistiques pseudo-R2, telles que les mesures de Maddala (1983) ou de Cragg et Uhler (1970).
+
+Lorsqu'on parle de régressions logistiques, les valeurs faibles de $R^2$ sont souvent courantes.
+
+La fonction `DescTools::PseudoR2()` calcule plusieurs pseudo-R2.
+
+La fonction `R DescTools::PseudoR2()` permet de calculer plusieurs pseudo-R2. En spécifiant `which = all`, calculez toutes les statistiques en même temps.
+
+```{r}
+logit.reg <- glm(pa ~ WatrCont + Topo, 
+                 data = mites, family = binomial(link = "logit"))
+DescTools::PseudoR2(logit.reg, which = "all")
+```
+
+
+
+## GLM et données de proportions
+
+Parfois, les données de proportions sont plus similaires à une régression logistiques que ce que nous pensons...
+
+En comptes discrets, nous pouvons, par exemple, mesurer le nombre de présences d'individus par rapport au nombre total de populations échantillonnées.
+
+Nous obtiendrons ainsi un nombre proportionnel de "succès" dans l'oberservation des individus en divisant les comptes par les comptes totaux.
+
+<div class="cadre">
+  <p>Dans `glm()`, nous devons fournir des poids a priori si la variable de réponse est la proportion de succès</p>
+</div>
+
+Les proportions peuvent être codées en fournissant le nombre de succès et des poids a priori dans la fonction :
+
+```{r}
+prop.reg <- glm(cbind(Galumna, totalabund - Galumna) ~ Topo + WatrCont,
+                data = mites,
+                family = binomial)
+```
+
+Les poids peuvent aussi être spécifiés dans `glm()`:
+
+```{r}
+prop.reg2 <- glm(prop ~ Topo + WatrCont,
+                 data = mites,
+                 family = binomial,
+                 weights = totalabund)
+```
+
+## GLM avec des données d'abondance
+
+Les **données d'abondance** font référence à des données qui fournissent des informations sur la quantité ou la fréquence de quelque chose. En général, ces données indiquent la présence ou la quantité relative d'un élément spécifique dans un ensemble de données.
+
+Importons le jeu de données `faramea.csv`.
+
+```{r}
+faramea <- read.csv('faramea.csv', header = TRUE)
+str(faramea)
+```
+
+Le nombre d'arbres de l'espèce Faramea occidentalis a été compté dans 43 quadrats sur l'île de Barro Colorado (Panama). Des données environnementales, comme l'élévation et la précipitation ont aussi été mesurées.
+
+Examinons maintenant à quoi ressemble la distribution du nombre d'arbres par transect.
+
+```{r}
+barplot(faramea$Faramea.occidentalis, 
+        ylab = "fréquence",
+        xlab = "Nombre de F. occidentalis")
+```
+
+L'élévation influence-t-elle l'abondance de F. occidentalis ?
+```{r}
+plot(faramea$Faramea.occidentalis, faramea$Elevation,
+     ylab = "Nombre de F.occidentalis",
+     xlab = "Elevation(m)")
+```
+
+Pas évident à première vue, passons à la modélisation.
+
+La distribution de Poisson est plus adéquate. En effet, elle spécifie la probabilité d'une variable aléatoire discrète Y. D'après le diagramme en barre de la variable cible ci-haut, on a à faire avec une variable de comptage, du coup discrète.
+
+__Quelques propriétés de la loi__
+$$
+f(y, \mu) = Pr(Y=y) = \frac{\mu^y\times e^{-\mu}}{y!}
+$$
+$$
+E(Y) = Var(Y) = \mu
+$$
+
+  - $\mu$ est le paramètre de la distribution
+  
+  - Elle spécifie la probabilité pour des valeurs entières uniquement
+  
+  - $P(Y<0)=0$
+  
+  - moyenne = variance (permet l'hétérogénéité)
+
+__Que se cache-t-il derrière un GLM Poisson__
+
+On cherche à modéliser la valeur de $\mu$ en fonction des différentes variables explicatives.
+
+  1. On suppose que $y\sim Poisson(\mu_i)$
+$$
+f(y_i, \mu_i) = \frac{\mu_i^{y_i}\times e^{-\mu_i}}{y_i!}
+$$
+
+$\mu$ correspond au nombre attendu d'individus
+
+  2. On spécifie le prédicteur linéaire comme dans un modèle linéaire
+
+$$
+\alpha + \beta\times \text{Elevation}_i
+$$
+
+  3. La fonction de lien entre la moyenne de $Y_i$ et la partie systématique est une fonction logarithmique et est écrité comme suit :
+
+<div class=grid>
+  <p>
+    $$
+    \log(\mu_i) = \alpha + \beta\times \text{Elevation}_i
+    $$
+    ou
+    $$
+    \mu_i = e^{\alpha + \beta\times \text{Elevation}_i}
+    $$
+  </p>
+  <span>
+    Ceci montre que l'impact de chaque variable explicative est multiplicatif. Augmenter l'élévation de un augmente $\mu$ par le facteur $\exp(\beta_{\text{Elevation}})$.<br>
+    Si $\beta_j = 0$, alors $\exp(\beta_j) = 1$ et $\mu$ n'est pas lié à $x_j$. Si $\beta_j>0$ alors $\mu$ augmente si $x_j$ augmente et vice-versa.
+  </span>
+</div>
+
+__Application dans R__
+
+La fonction `glm()` permet de spécifier un GLM Poisson comme suit :
+
+```{r}
+glm.poisson = glm(Faramea.occidentalis ~ Elevation,
+                  data = faramea, family = poisson)
+summary(glm.poisson)
+```
+
+L'argument `family` spécifie le type de distribution et la fonction lien.
+
+On a :
+$$
+\log(\mu_i) = 1.769 - 0.0027\times\text{Elevation}_i
+$$
+ou
+$$
+\mu_i = e^{1.769 - 0.0027\times\text{Elevation}_i}
+$$
+Rappelez vous que pour estimer les paramètres inconnus, l'estimation par maximum de vraisemblance est utilisée.
+
+La déviance résiduelle est approximativement la différence entre la vraisemblance d'un modèle saturé ($n$ paramètres pour chaque observation) et le modèle complet ($p$ paramètres) :
+
+$$
+\text{Res dev} = 2\left(\log(L(y; y)) -\log(L(y;\mu))\right)
+$$
+
+Dans un GLM Poisson, la déviance résiduelle doit être égale au nombre de degrés de liberté résiduels.
+<div class="cadre">
+  Notre déviance résiduelle est beaucoup plus grande que les degrés de liberté de notre modèle!
+</div>
+
+__La surdispersion__
+
+Pour une distribution Poisson $var[y]=\mu$, . En pratique, cependant, on constate que la variance des données dépasse souvent $\mu$, indiquant une surdispersion dans les paramètres du modèle.
+
+La surdispersion est due au fait que la moyenne $\mu$ varie intrinsèquement, même lorsque toutes les variables explicatives sont fixes, ou parce que le les événements qui sont comptés sont corrélés positivement.
+
+__Problème__ : Les tests sur les variables explicatives apparaîtront généralement plus significatifs et les intervalles de confiance des paramètres seront plus étroits que les données ne le justifierait!
+
+Quand la déviance résiduelle est supérieure au nombre de degrés de liberté résiduels, le modèle est __surdispersé__.
+
+<div class="grid">
+  <p>
+    On peut calculer le paramètre de surdispersion ($\phi$) par :
+    $$
+    \phi = \frac{\text{Déviance résiduelle}}{\text{Degrés de liberté résiduels}}
+    $$
+  </p>
+  
+  <p>
+      Si, $\phi$ est plus que 1, alors nous devrons l'estimer avec : 
+      $$
+        \hat\phi = \frac{1}{n-k}\sum\frac{\left(Y_i - \hat\mu_i\right)^2}{\hat\mu_i}
+      $$
+  </p>
+</div>
+
+Sur `R`, on peut obtenir $\phi$ par :
+```{r eval=FALSE}
+sum(residuals(ton_obj_glm, type="pearson")^2)/df.residual(ton_obj_glm)
+```
+
+__Solutions__
+
+  1. Corriger la surdispersion en utilisant un __GLM quasi-Poisson__
+  2. Choisir une autre distribution comme la __negative binomiale__
+
+### GLM quasi-Poisson
+
+La variance du modèle tient compte de la surdispersion en ajoutant le paramètre de surdispersion : 
+$$
+Var(Y_i) = \phi\times\mu_i
+$$
+où $\phi$ est le paramètre de dispersion. Il sera estimé avant les paramètres.
+
+L'espérance, le prédicteur linéaire et la fonction de lien restent les mêmes.
+
+__NB__ : Cette correction n'affecte pa l'etimation des paramètres, mais leur significativité, car les écarts-types des paramètres seront multipliés par $\sqrt{\phi}$. De ce fait, <span style="color: red; font-weight: bold;">certains p-values marginalement significatives peuvent devenir non significatives</span>.
+
+Sous `R`, on peut mettre le modèle de Poisson précédent à jour ou créer un nouveau GLM à l'aide de la famille `quasipoisson`
+
+```{r eval=FALSE}
+glm.quasipoisson = update(glm.poisson, 
+                          family = quasipoisson)
+```
+
+```{r}
+glm.quasipoisson = glm(Faramea.occidentalis ~ Elevation, 
+                       data = faramea,
+                       family=quasipoisson)
+summary(glm.quasipoisson)
+```
+
+On peut remarquer que les écarts-types des paramètres sont multipliés par $\sqrt{\phi} = 4$.
+
+Pour tester l'effet de l'élévation par une analyse de déviance : 
+```{r}
+null.model <- glm(Faramea.occidentalis ~ 1, 
+                  data = faramea,
+                  family = quasipoisson)
+anova(null.model, glm.quasipoisson, test = "Chisq")
+```
+
+### GLM binomiale negative
+
+Quand la surdispersion est élevée ($\phi > 15$), une distribution binomiale négative est plus appropriée.
+
+  - La distribution a deux paramètres $\mu$ et $k$ pour le contrôle de la dispersion (plus la persion est forte, plus k est petit);
+  - C'est une combinaison de deux distributions (__Poisson__ et __gamma__)
+  - Les $Y_i$ suivent une distribution de Poisson dont la moyenne $\mu$ suit une distribution Gamma.
+  
+Le valeurs prédites suivent :
+$$
+E(Y_i) = \mu_i
+$$
+et la fonction de variance:
+$$
+Var(Y_i) = \mu_i + \frac{\mu_i^2}{k}
+$$
+
+Notons que la distribution binomiale n'est pas dans la fonction `glm()`, donc il faut installer et charger le package `MASS`
+
+```{r}
+glm.negbin <- MASS::glm.nb(Faramea.occidentalis ~ Elevation, data = faramea)
+summary(glm.negbin)
+```
+
+```{r include=FALSE}
+alpha <- summary(glm.negbin)$coefficients[1, 1]
+beta <- summary(glm.negbin)$coefficients[2, 1]
+```
+
+Le modèle final est :
+$$
+\mu_i = e^{\text{`r alpha`}+\text{`r beta`}\times\text{Elevation}_i}
+$$
+
+```{r eval=FALSE}
+pp <- predict(glm.negbin, 
+              newdata = data.frame(Elevation = 1:800), 
+              se.fit = TRUE)
+linkinv <- family(glm.negbin)$linkinv ## fonction lien-inverse
+pframe$pred0 <- pp$fit
+pframe$pred <- linkinv(pp$fit)
+sc <- abs(qnorm((1-0.95)/2))  ## Normal approx. to likelihood
+pframe <- transform(pframe, 
+                    lwr = linkinv(pred0-sc*pp$se.fit), 
+                    upr = linkinv(pred0+sc*pp$se.fit))
+# sinon, utiiser predict() avec type="response"
+plot(faramea$Elevation, faramea$Faramea.occidentalis, 
+     ylab = 'Number of F. occidentalis', xlab = 'Elevation(m)')
+lines(pframe$pred, lwd = 2)
+lines(pframe$upr, col = 2, lty = 3, lwd = 2)
+lines(pframe$lwr, col = 2, lty = 3, lwd = 2)
+```
+
+
+## Defi
+
+### Défi 1
+
+En utilisant le jeu de données bacteria, spécifiez un modèle de la présence de H. influenzae en fonction du traitement et de la semaine de test.
+
+```{r}
+library(MASS)
+data(bacteria)
+str(bacteria)
+```
+
+Commençons avec un modèle complet et trouvez le modèle le plus parcimonieux.
+
+```{r}
+model.bact1 <- glm(y ~ trt * week, data = bacteria, family = binomial)
+model.bact2 <- glm(y ~ trt + week, data = bacteria, family = binomial)
+model.bact3 <- glm(y ~ week, data = bacteria, family = binomial)
+anova(model.bact1, model.bact2, model.bact3, test = "LRT")
+```
+
+### Defi 2
+
+__Questions__
+
+  1. En utilisant le modèle créé avec le jeu de données bacteria, évaluez le pouvoir prédictif et l'ajustement de ce modèle.
+
+  2. Comment améliorer le pouvoir explicatif du modèle?
+  
+__Solutions__
+
+  1. En utilisant le modèle créé avec le jeu de données bacteria, évaluez le pouvoir prédictif et l'ajustement de ce modèle.
+  
+```{r}
+null.d <- model.bact2$null.deviance
+resid.d <- model.bact2$deviance
+bact.pseudoR2 <- (null.d - resid.d) / null.d
+bact.pseudoR2
+```
+
+  2. Comment améliorer le pouvoir explicatif du modèle?
+  
+Ajouter des variables explicatives pertinentes pourrait certainement augmenter le pouvoir explicatif du modèle.
+
+Mais, n'ayez pas peur de résultats non-significatifs!
